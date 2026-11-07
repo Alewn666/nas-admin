@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>NAS 管理</title>
+<link rel="stylesheet" href="static/css/style.css?v={{v}}">
+</head>
+<body>
+
+<!-- ========== 口令门（与作文批改同一套 .login-overlay 语义：401 → 弹遮罩 → 解锁重试） ========== -->
+<div class="login-overlay hidden" id="pwOverlay">
+  <div class="login-box">
+    <div class="login-icon">🔐</div>
+    <h2 class="login-title">NAS 管理口令</h2>
+    <p class="login-sub">这一页能动 NAS 上的东西，先验证身份</p>
+    <input class="input login-input" id="pwInput" type="password" placeholder="管理口令"
+           autocomplete="current-password">
+    <div class="login-error hidden" id="pwErr">口令不正确，重试</div>
+    <button class="btn primary wide" id="btnPwOk">解锁</button>
+    <button class="btn ghost wide" id="btnPwCancel" style="margin-top:8px">取消</button>
+  </div>
+</div>
+
+{% if not configured %}<div class="banner" id="cfgBanner">{% else %}<div class="banner hidden" id="cfgBanner">{% endif %}⚠️ 服务端还没配置 NAS_ADMIN_PW 口令，整站已停用</div>
+
+<header class="topbar">
+  <div class="brand">🛠️ NAS 管理</div>
+  <div class="top-actions">
+    <button class="btn ghost icon" id="btnRefresh" title="刷新当前页">🔄</button>
+    <button class="btn ghost icon" id="btnLogout" title="退出">⎋</button>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button class="tab on" data-v="overview">📊 总览</button>
+  <button class="tab" data-v="containers">📦 容器</button>
+  <button class="tab" data-v="files">📁 文件</button>
+  <button class="tab" data-v="cmd">💻 命令</button>
+  <button class="tab" data-v="danger">🚨 危险区</button>
+</nav>
+
+<main id="app">
+
+  <!-- ========== 1. 总览 ========== -->
+  <section class="view" id="view-overview">
+    <div class="card-head">
+      <span class="lbl">📊 总览</span>
+      <span class="row">
+        <span class="muted small" id="ovAge"></span>
+        <span class="muted small" style="color:var(--ok)">● 自动刷新</span>
+        <select class="input tiny" id="ovAutoSec" title="刷新间隔">
+          <option value="3">3 秒</option>
+          <option value="5" selected>5 秒</option>
+          <option value="10">10 秒</option>
+          <option value="30">30 秒</option>
+        </select>
+      </span>
+    </div>
+    <div class="stats mt" id="ovStats"></div>
+    <div class="card mt" id="chartCard">
+      <div class="card-head">
+        <span class="lbl">📈 CPU / 内存走势</span>
+        <span class="row">
+          <span class="muted small" id="chHint">采样中…</span>
+          <select class="input tiny" id="chRange" title="时间范围">
+            <option value="5">近 5 分钟</option>
+            <option value="15" selected>近 15 分钟</option>
+            <option value="30">近 30 分钟</option>
+            <option value="60">近 60 分钟</option>
+          </select>
+        </span>
+      </div>
+      <div class="charts">
+        <div class="chart-box">
+          <div class="chart-head">
+            <span class="lbl2">CPU 占用</span>
+            <span class="chart-now"><b id="chCpuNow">–</b><span class="muted small" id="chCpuMeta"></span></span>
+          </div>
+          <canvas id="chCpu" class="chart-canvas" aria-label="CPU 占用走势图"></canvas>
+        </div>
+        <div class="chart-box">
+          <div class="chart-head">
+            <span class="lbl2">内存</span>
+            <span class="chart-now"><b id="chMemNow">–</b><span class="muted small" id="chMemMeta"></span></span>
+          </div>
+          <canvas id="chMem" class="chart-canvas" aria-label="内存走势图"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="ov-grid mt">
+      <div class="card" id="diskCard">
+        <div class="card-head"><span class="lbl">💾 磁盘</span><span class="muted small" id="ovUptime"></span></div>
+        <div id="ovDisks"><div class="muted small">读取中…</div></div>
+      </div>
+      <div class="col">
+        <div class="card">
+          <div class="card-head"><span class="lbl">📦 容器概况</span>
+            <button class="btn ghost tiny" data-go="containers">去容器页 ›</button></div>
+          <div id="ovContainers" class="muted small">读取中…</div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="lbl">🧩 系统信息</span></div>
+          <div id="ovMisc" class="small">读取中…</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== 2. 容器 ========== -->
+  <section class="view hidden" id="view-containers">
+    <div class="card">
+      <div class="card-head">
+        <span class="lbl">📦 容器（<span id="ctCount">–</span>）</span>
+        <span class="row">
+          <span class="muted small" id="ctAge"></span>
+          <span class="muted small" style="color:var(--ok)">● 自动刷新</span>
+          <select class="input tiny" id="ctAutoSec" title="刷新间隔">
+            <option value="5">5 秒</option>
+            <option value="10" selected>10 秒</option>
+            <option value="30">30 秒</option>
+          </select>
+          <button class="btn ghost tiny" id="btnCtStats">📈 资源占用</button>
+          <button class="btn ghost tiny" id="btnCtReload">🔄 刷新</button>
+        </span>
+      </div>
+      <div id="ctList"><div class="muted small">读取中…</div></div>
+    </div>
+    <div class="card mt hidden" id="ctLogCard">
+      <div class="card-head">
+        <span class="lbl">📜 日志 · <span id="ctLogName" class="mono"></span></span>
+        <button class="btn ghost tiny" id="btnCtLogClose">收起</button>
+      </div>
+      <div class="term" id="ctLogBox"></div>
+    </div>
+  </section>
+
+  <!-- ========== 3. 文件 ========== -->
+  <section class="view hidden" id="view-files">
+    <div class="card">
+      <div class="card-head"><span class="lbl">📁 文件</span>
+        <span class="row">
+          <button class="btn ghost tiny" id="btnFsUp">⬆️ 上传</button>
+          <button class="btn ghost tiny" id="btnFsMkdir">➕ 建目录</button>
+          <button class="btn ghost tiny" id="btnFsReload">🔄 刷新</button>
+        </span>
+      </div>
+      <div class="row mt" style="margin-bottom:6px">
+        <input class="input mono-in grow" id="fsPath" value="{{root}}" placeholder="/vol1/1000/项目" autocomplete="off">
+        <button class="btn tiny" id="btnFsGo">前往</button>
+      </div>
+      <div class="crumbs" id="fsCrumbs"></div>
+      <div id="fsList"><div class="muted small">读取中…</div></div>
+      <input type="file" id="fsFile" multiple class="hidden">
+    </div>
+
+    <div class="card mt hidden" id="fsEditCard">
+      <div class="card-head">
+        <span class="lbl">✏️ 编辑 · <span id="fsEditName" class="mono"></span></span>
+        <span class="row">
+          <button class="btn ghost tiny" id="btnFsDl">⬇️ 下载</button>
+          <button class="btn ghost tiny" id="btnFsDel">🗑 删除</button>
+          <button class="btn ghost tiny" id="btnFsEditClose">收起</button>
+        </span>
+      </div>
+      <textarea class="textarea mono-in" id="fsEdit" rows="16" spellcheck="false"></textarea>
+      <button class="btn primary wide mt" id="btnFsSave">💾 保存</button>
+    </div>
+  </section>
+
+  <!-- ========== 4. 命令 ========== -->
+  <section class="view hidden" id="view-cmd">
+    <div class="card">
+      <div class="card-head"><span class="lbl">💻 执行命令（root，超时 30 秒）</span></div>
+      <input class="input mono-in" id="cmdIn" placeholder="df -h；systemctl status essay-revise"
+             autocomplete="off" spellcheck="false">
+      <button class="btn primary wide mt" id="btnCmdRun">▶ 执行</button>
+      <div class="term mt hidden" id="cmdOut"></div>
+      <div class="muted small mt">⚠️ 这里跑的是 NAS 上的**真实命令**，每一条都记进审计日志。</div>
+    </div>
+    <div class="card mt">
+      <div class="card-head"><span class="lbl">🕘 最近执行（审计）</span>
+        <button class="btn ghost tiny" id="btnAuditReload">刷新</button></div>
+      <div id="cmdHistory"><div class="muted small">读取中…</div></div>
+    </div>
+  </section>
+
+  <!-- ========== 5. 危险区 ========== -->
+  <section class="view hidden" id="view-danger">
+    <div class="card danger-card">
+      <div class="card-head"><span class="lbl">🚨 重启 NAS</span></div>
+      <div class="muted small">服务、容器全部重启；正在批改的作文可能中断。</div>
+      <div class="confirm-in">
+        <input class="input" id="cfReboot" placeholder='输入「重启」确认' autocomplete="off">
+        <button class="btn danger" id="btnReboot">重启</button>
+      </div>
+    </div>
+    <div class="card danger-card mt">
+      <div class="card-head"><span class="lbl">⏻ 关机</span></div>
+      <div class="muted small">NAS 会关机，需要人到机器上或远程唤醒才能再开。</div>
+      <div class="confirm-in">
+        <input class="input" id="cfShutdown" placeholder='输入「关机」确认' autocomplete="off">
+        <button class="btn danger" id="btnShutdown">关机</button>
+      </div>
+    </div>
+    <div class="card danger-card mt">
+      <div class="card-head"><span class="lbl">🧹 清理 docker 垃圾</span></div>
+      <div class="muted small">删悬空镜像与已停止容器、回收空间；<b>不动数据卷</b>（作文/博客数据安全）。</div>
+      <div class="confirm-in">
+        <input class="input" id="cfPrune" placeholder='输入「清理」确认' autocomplete="off">
+        <button class="btn danger" id="btnPrune">清理</button>
+      </div>
+      <div class="term mt hidden" id="pruneOut"></div>
+    </div>
+    <div class="card mt">
+      <div class="card-head"><span class="lbl">🧾 审计日志</span>
+        <button class="btn ghost tiny" id="btnAudit2">刷新</button></div>
+      <div id="auditList"><div class="muted small">读取中…</div></div>
+    </div>
+  </section>
+
+</main>
+
+<div class="toast hidden" id="toast"></div>
+<script src="static/js/app.js?v={{v}}"></script>
+</body>
+</html>
