@@ -13,10 +13,10 @@
 
 | 分类 | API / 能力 |
 | --- | --- |
-| 总览 | `/api/overview` 主机信息、`/api/charts` 历史曲线（TTL 缓存）、`/api/balance` 负载均衡视图 |
+| 总览 | `/api/overview` 主机信息、`/api/charts` 历史曲线（TTL 缓存）、`/api/balance` DeepSeek API 余额查询（默认缓存 300 秒） |
 | 文件 | `/api/fs` 列目录、读、保存、建目录、上传、下载、**整目录打包下载**、删除 |
 | 容器 | `/api/containers` 列表、`/api/container` 启停、`/api/container/logs` 日志 |
-| 执行 | `/api/exec` 在宿主机执行命令 |
+| 执行 | `/api/exec` 在宿主机执行命令（bash，30 秒超时，输出回显，全程审计） |
 | 系统 | `/api/system` 重启 / 关机 |
 | 审计 | `/api/audit` 全量动作日志 |
 | 健康检查 | `/api/health`（Dockerfile 内用 Python 探活，不依赖镜像里的 curl） |
@@ -28,7 +28,7 @@
 | 口令不落盘 | 首次部署给 `NAS_ADMIN_PW` 或 `NAS_ADMIN_PW_HASH`，写入 `env.nasadmin`（权限 **600**），只建一次；推荐直接给 **PBKDF2 哈希**，明文不进磁盘也不进命令行 |
 | 会话 | 服务端 session，`NAS_ADMIN_SECRET` 自动生成并补进 env 文件，可配 `NAS_ADMIN_SESSION_DAYS` |
 | 防爆破 | 连续错 5 次锁定 30 秒 |
-| 防误操作 | 删目录、重启、关机等动作一律**二次确认** |
+| 防误操作 | 删目录要输完整路径、删文件要输文件名，重启 / 关机等动作一律**服务端二次确认** |
 | 可追溯 | 每个动作落到审计日志 |
 | 网络边界 | 端口只绑局域网 IP，**部署脚本明确不映射公网** |
 
@@ -67,10 +67,10 @@ NAS_ADMIN_PW='你的口令' NAS_ADMIN_PORT=8091 python3 app.py
 | `NAS_ADMIN_FS_ROOT` | `/host` | 文件管理可见的根 |
 | `NAS_ADMIN_NSENTER` | `1` | 通过 `nsenter -t 1` 进宿主命名空间 |
 | `NAS_ADMIN_DATA` | `/app/data` | 历史数据与审计日志目录 |
-| `NAS_ADMIN_PBKDF2_ROUNDS` | — | 口令派生轮数 |
-| `NAS_ADMIN_SESSION_DAYS` | — | session 有效期 |
+| `NAS_ADMIN_PBKDF2_ROUNDS` | `390000` | 口令派生轮数 |
+| `NAS_ADMIN_SESSION_DAYS` | `30` | 持久 cookie 记住登录的天数 |
 | `NAS_ADMIN_HIST_INTERVAL` / `NAS_ADMIN_HIST_MAX` | — | 历史曲线采样间隔与保留点数 |
-| `NAS_ADMIN_BAL_TTL` | — | 负载均衡视图缓存时间 |
+| `NAS_ADMIN_BAL_TTL` | `300` | DeepSeek API 余额查询的缓存秒数（下限 30） |
 
 ## 目录结构
 
